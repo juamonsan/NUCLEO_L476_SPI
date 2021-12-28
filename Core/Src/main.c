@@ -14,7 +14,15 @@
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
+  * SPI and UART communications with NUCLEO64-L476RG
+  *
+  * Juan M. Montes - jmontes@atc.us.es
+  * ORCID: 0000-0002-0983-2386
+  * GitHub: https://github.com/juamonsan
+  *
+  ******************************************************************************
   */
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -68,7 +76,7 @@ static void MX_SPI2_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	char First[]="Probando UART\r\n"; //Para mandar por la UART
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -102,6 +110,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+	  HAL_UART_Transmit(&huart2, (uint8_t*)First, sizeof(First), 100); //Envía por la UART2 la cadena First
+	  HAL_SPI_Transmit(&hspi2, (uint8_t*)First, sizeof(First), 100); //Envía por SPI la cadena First
+	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	  HAL_Delay(1000);
+
   }
   /* USER CODE END 3 */
 }
