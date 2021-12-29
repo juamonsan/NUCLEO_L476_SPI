@@ -39,6 +39,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define BUFFER_SIZE 3
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,10 +49,12 @@
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi2;
+DMA_HandleTypeDef hdma_spi2_tx;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+uint8_t WR_flag = 0; //flag que indica que hay un dato listo para enviar
 
 /* USER CODE END PV */
 
@@ -59,6 +62,7 @@ UART_HandleTypeDef huart2;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -76,7 +80,11 @@ static void MX_SPI2_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	char First[]="Probando UART\r\n"; //Para mandar por la UART
+	uint16_t Spi_Tx_Buffer[BUFFER_SIZE] = {0}; //Para mandar por la UART/SPI
+	//uint8_t Spi_Tx_Buffer[]="Hello world!\r\n"; //Para mandar por la UART/SPI
+
+	uint16_t Accel_x, Accel_y, Accel_z;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,6 +106,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_DMA_Init();
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
 
@@ -107,14 +116,34 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  //se actualiza el acelerómetro
+	  Accel_x = 0xAABB; //datos ficticios fijos para debug de los 3 ejes
+	  Accel_y = 0xCCDD;
+	  Accel_z = 0xEEFF;
+
+	  //se compone el buffer con las 3 lecturas
+	  Spi_Tx_Buffer[0]=Accel_x;
+	  Spi_Tx_Buffer[1]=Accel_y;
+	  Spi_Tx_Buffer[2]=Accel_z;
+
+
+	  WR_flag = 1; //There is data to send!
+
+	  if (WR_flag==1){
+		  HAL_GPIO_WritePin(SPI2_WR_GPIO_Port, SPI2_WR_Pin, SET); //Pone WR pin a 1
+		  HAL_SPI_Transmit_DMA(&hspi2, (uint16_t*)Spi_Tx_Buffer, sizeof(Spi_Tx_Buffer)); //y envía SPI por DMA
+	  }
+
+	  //HAL_UART_Transmit(&huart2, (uint8_t*)Spi_Tx_Buffer, sizeof(Spi_Tx_Buffer), 100); //Envía por la UART2, solo para debug
+	  //HAL_SPI_Transmit(&hspi2, (uint8_t*)Spi_Tx_Buffer, sizeof(Spi_Tx_Buffer), 100); //Envía por SPI la cadena Buffer (polling)
+	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin); //Stay alive LED
+	  HAL_Delay(1000);
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
-	  HAL_UART_Transmit(&huart2, (uint8_t*)First, sizeof(First), 100); //Envía por la UART2 la cadena First
-	  HAL_SPI_Transmit(&hspi2, (uint8_t*)First, sizeof(First), 100); //Envía por SPI la cadena First
-	  HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-	  HAL_Delay(1000);
 
   }
   /* USER CODE END 3 */
@@ -243,6 +272,22 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -260,6 +305,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(SPI2_WR_GPIO_Port, SPI2_WR_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
@@ -273,9 +321,23 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : SPI2_WR_Pin */
+  GPIO_InitStruct.Pin = SPI2_WR_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(SPI2_WR_GPIO_Port, &GPIO_InitStruct);
+
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    //Tx done, then this function is executed
+	WR_flag = 0; //resets WR flag
+	HAL_GPIO_WritePin(SPI2_WR_GPIO_Port, SPI2_WR_Pin, RESET); //Reset WR pin
+}
+
 
 /* USER CODE END 4 */
 
